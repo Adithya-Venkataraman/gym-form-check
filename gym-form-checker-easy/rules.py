@@ -54,7 +54,6 @@ def make_tracker(exercise):
     }
     return configs.get(exercise, RepTracker(90, 150))
 
-
 def check_squat(angles, tracker):
     feedback = []
     knee = min(angles["left_knee"], angles["right_knee"])
@@ -63,17 +62,20 @@ def check_squat(angles, tracker):
     tracker.update(knee)
 
     if tracker.pop_feedback_due():
-        if tracker.min_angle > 100:
-            feedback.append("Not deep enough — squat below parallel")
+        if tracker.min_angle > 110:
+            feedback.append("Bend your knees more — go deeper")
+        elif tracker.min_angle > 95:
+            feedback.append("Almost there — just a bit deeper")
         elif tracker.min_angle < 50:
             feedback.append("Too deep — stop at parallel")
         else:
-            feedback.append("Good depth!")
+            feedback.append("Perfect depth!")
 
+    # continuous checks every frame
     if hip > 130:
-        feedback.append("Leaning too far forward")
+        feedback.append("Chest too low — don't lean forward")
     elif hip < 55:
-        feedback.append("Too upright — hinge at hips more")
+        feedback.append("Hinge forward slightly at the hips")
 
     return feedback
 
@@ -127,13 +129,12 @@ def check_incline_chest_press(angles, tracker):
     tracker.update(elbow)
 
     if tracker.pop_feedback_due():
-        # min_angle captured at bottom of rep
         if tracker.min_angle > 90:
-            feedback.append("Go lower — bring dumbbells down more")
+            feedback.append("Lower your arms more — bring dumbbells to chest level")
         elif tracker.min_angle < 70:
-            feedback.append("Too deep — risk of shoulder strain")
+            feedback.append("Too low — stop when elbows reach shoulder level")
         else:
-            feedback.append("Good range of motion!")
+            feedback.append("Great range of motion — keep it up!")
 
     return feedback
 
@@ -152,20 +153,30 @@ def detect_exercise(angles, landmarks):
     hip_y      = (lm[L.LEFT_HIP].y      + lm[L.RIGHT_HIP].y)      / 2
     shoulder_y = (lm[L.LEFT_SHOULDER].y + lm[L.RIGHT_SHOULDER].y) / 2
     wrist_y    = (lm[L.LEFT_WRIST].y    + lm[L.RIGHT_WRIST].y)    / 2
+    knee_y     = (lm[L.LEFT_KNEE].y     + lm[L.RIGHT_KNEE].y)     / 2
 
     avg_knee     = (angles["left_knee"]     + angles["right_knee"])     / 2
     avg_elbow    = (angles["left_elbow"]    + angles["right_elbow"])    / 2
     avg_shoulder = (angles["left_shoulder"] + angles["right_shoulder"]) / 2
 
-    arms_raised  = wrist_y < shoulder_y
-    body_upright = shoulder_y < hip_y - 0.05
+    arms_raised   = wrist_y < shoulder_y
+    body_upright  = shoulder_y < hip_y - 0.05
+    # person is lying down — shoulder and hip at similar height
+    body_lying    = abs(shoulder_y - hip_y) < 0.2
 
-    if arms_raised and avg_elbow < 160:
-        return "incline_chest_press"
+    # squat — upright body, knees bent, feet on ground
     if body_upright and avg_knee < 150 and hip_y > 0.5:
         return "squat"
+
+    # incline chest press — only when body is lying/reclined AND arms raised
+    if body_lying and arms_raised and avg_elbow < 160:
+        return "incline_chest_press"
+
+    # curl — upright, elbow bent, minimal shoulder movement
     if body_upright and avg_elbow < 130 and avg_shoulder < 60:
         return "curl"
+
+    # pushup — low hip position
     if hip_y > 0.75 and avg_elbow < 160:
         return "pushup"
 
